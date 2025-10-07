@@ -3,7 +3,7 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 @app.route("/")
 def home():
-    return "Welcome to the Arithmetic API! Use /add, /subtract, /multiply, /divide with parameters a and b. test changes"
+    return "use /add, /subtract, /multiply, /divide with parameters a and b"
 
 
 @app.route("/add")
