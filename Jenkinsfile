@@ -3,7 +3,8 @@ pipeline {
 
     environment {
         // Python and Docker
-        //PYTHON_IMAGE = 'python:3.9-slim' // only relevant if using docker later
+        //PYTHON_IMAGE = 'python:3.9-slim' // only relevant if using docker later 
+        PYTHON_PATH = 'C:\\Users\\ADIB\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\python.exe'
         IMAGE_NAME = 'devsecops-flask'
         VENV_PATH = '.\\venv'
     }
