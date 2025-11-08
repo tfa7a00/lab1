@@ -25,26 +25,25 @@ pipeline {
         stage('Find Python') {
             steps {
                 script {
-                    // Try to find Python using PowerShell (most reliable for LocalSystem)
-                    def pythonExe = null
+                    echo "Searching for Python..."
                     
-                    // Use PowerShell to find Python - works better for LocalSystem
+                    // Use PowerShell to find Python
                     def psScript = '''
                         $found = $null
-                        # Try 'py' launcher first (best for service accounts)
+                        
+                        # Try 'py' launcher
                         $py = Get-Command py -ErrorAction SilentlyContinue
-                        if ($py) { 
-                            # Test if py launcher actually works
+                        if ($py) {
                             $test = & py --version 2>&1
                             if ($LASTEXITCODE -eq 0) {
                                 $found = "py"
                             }
                         }
                         
+                        # Try 'python' command
                         if (-not $found) {
-                            # Try 'python' command
                             $python = Get-Command python -ErrorAction SilentlyContinue
-                            if ($python) { 
+                            if ($python) {
                                 $test = & python --version 2>&1
                                 if ($LASTEXITCODE -eq 0) {
                                     $found = $python.Path
@@ -52,8 +51,8 @@ pipeline {
                             }
                         }
                         
+                        # Try system paths
                         if (-not $found) {
-                            # Try common system locations (accessible to service accounts)
                             $paths = @(
                                 "C:\\Program Files\\Python311\\python.exe",
                                 "C:\\Program Files\\Python312\\python.exe",
@@ -64,7 +63,6 @@ pipeline {
                             )
                             foreach ($path in $paths) {
                                 if (Test-Path $path) {
-                                    # Verify it's actually executable
                                     $test = & $path --version 2>&1
                                     if ($LASTEXITCODE -eq 0) {
                                         $found = $path
@@ -74,43 +72,21 @@ pipeline {
                             }
                         }
                         
-                        if ($found) { 
-                            Write-Output $found 
-                        } else { 
-                            Write-Output "NOT_FOUND" 
+                        if ($found) {
+                            Write-Output $found
+                        } else {
+                            Write-Output "NOT_FOUND"
                         }
                     '''
                     
-                    try {
-                        def psOutput = powershell(script: psScript, returnStdout: true).trim()
-                        if (psOutput && psOutput != "NOT_FOUND") {
-                            pythonExe = psOutput
-                            echo "Found Python: ${pythonExe}"
-                            
-                            // Verify the Python executable works before proceeding
-                            if (pythonExe == "py") {
-                                // Test py launcher
-                                def testResult = bat(script: "py --version", returnStdout: true, returnStatus: true)
-                                if (testResult != 0) {
-                                    error("Python launcher 'py' found but not working. Please install Python system-wide.")
-                                }
-                            } else {
-                                // Test full path
-                                def testResult = bat(script: "\"${pythonExe}\" --version", returnStdout: true, returnStatus: true)
-                                if (testResult != 0) {
-                                    error("Python found at ${pythonExe} but not executable. Please check permissions.")
-                                }
-                            }
-                        } else {
-                            error("Python not found! Please install Python system-wide (e.g., C:\\Program Files\\Python311\\) or ensure 'py' launcher is available.")
-                        }
-                    } catch (Exception e) {
-                        error("Failed to find Python: ${e.getMessage()}. Please install Python system-wide or ensure 'py' launcher is available.")
-                    }
+                    def psOutput = powershell(script: psScript, returnStdout: true).trim()
                     
-                    // Store in environment variable for later stages
-                    env.PYTHON_EXE = pythonExe
-                    echo "Will use Python: ${env.PYTHON_EXE}"
+                    if (psOutput && psOutput != "NOT_FOUND") {
+                        env.PYTHON_EXE = psOutput
+                        echo "Python found: ${env.PYTHON_EXE}"
+                    } else {
+                        error("Python not found!")
+                    }
                 }
             }
         }
