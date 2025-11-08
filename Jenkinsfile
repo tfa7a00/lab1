@@ -31,33 +31,54 @@ pipeline {
                     // Use PowerShell to find Python - works better for LocalSystem
                     def psScript = '''
                         $found = $null
-                        # Try 'py' launcher first
+                        # Try 'py' launcher first (best for service accounts)
                         $py = Get-Command py -ErrorAction SilentlyContinue
                         if ($py) { 
-                            $found = "py"
-                        } else {
+                            # Test if py launcher actually works
+                            $test = & py --version 2>&1
+                            if ($LASTEXITCODE -eq 0) {
+                                $found = "py"
+                            }
+                        }
+                        
+                        if (-not $found) {
                             # Try 'python' command
                             $python = Get-Command python -ErrorAction SilentlyContinue
                             if ($python) { 
-                                $found = $python.Path
-                            } else {
-                                # Try common system locations
-                                $paths = @(
-                                    "C:\\Program Files\\Python311\\python.exe",
-                                    "C:\\Program Files\\Python312\\python.exe",
-                                    "C:\\Program Files (x86)\\Python311\\python.exe",
-                                    "C:\\Python311\\python.exe",
-                                    "C:\\Python312\\python.exe"
-                                )
-                                foreach ($path in $paths) {
-                                    if (Test-Path $path) {
+                                $test = & python --version 2>&1
+                                if ($LASTEXITCODE -eq 0) {
+                                    $found = $python.Path
+                                }
+                            }
+                        }
+                        
+                        if (-not $found) {
+                            # Try common system locations (accessible to service accounts)
+                            $paths = @(
+                                "C:\\Program Files\\Python311\\python.exe",
+                                "C:\\Program Files\\Python312\\python.exe",
+                                "C:\\Program Files\\Python313\\python.exe",
+                                "C:\\Program Files (x86)\\Python311\\python.exe",
+                                "C:\\Python311\\python.exe",
+                                "C:\\Python312\\python.exe"
+                            )
+                            foreach ($path in $paths) {
+                                if (Test-Path $path) {
+                                    # Verify it's actually executable
+                                    $test = & $path --version 2>&1
+                                    if ($LASTEXITCODE -eq 0) {
                                         $found = $path
                                         break
                                     }
                                 }
                             }
                         }
-                        if ($found) { Write-Output $found } else { Write-Output "NOT_FOUND" }
+                        
+                        if ($found) { 
+                            Write-Output $found 
+                        } else { 
+                            Write-Output "NOT_FOUND" 
+                        }
                     '''
                     
                     try {
@@ -65,14 +86,26 @@ pipeline {
                         if (psOutput && psOutput != "NOT_FOUND") {
                             pythonExe = psOutput
                             echo "Found Python: ${pythonExe}"
+                            
+                            // Verify the Python executable works before proceeding
+                            if (pythonExe == "py") {
+                                // Test py launcher
+                                def testResult = bat(script: "py --version", returnStdout: true, returnStatus: true)
+                                if (testResult != 0) {
+                                    error("Python launcher 'py' found but not working. Please install Python system-wide.")
+                                }
+                            } else {
+                                // Test full path
+                                def testResult = bat(script: "\"${pythonExe}\" --version", returnStdout: true, returnStatus: true)
+                                if (testResult != 0) {
+                                    error("Python found at ${pythonExe} but not executable. Please check permissions.")
+                                }
+                            }
                         } else {
-                            // Fallback to configured path
-                            pythonExe = PYTHON_FULL_PATH
-                            echo "Using configured Python path: ${pythonExe}"
+                            error("Python not found! Please install Python system-wide (e.g., C:\\Program Files\\Python311\\) or ensure 'py' launcher is available.")
                         }
                     } catch (Exception e) {
-                        echo "PowerShell search failed, using configured path"
-                        pythonExe = PYTHON_FULL_PATH
+                        error("Failed to find Python: ${e.getMessage()}. Please install Python system-wide or ensure 'py' launcher is available.")
                     }
                     
                     // Store in environment variable for later stages
@@ -87,7 +120,8 @@ pipeline {
                 script {
                     // Create Python virtual environment
                     // Using Python found in previous stage
-                    bat "\"${env.PYTHON_EXE}\" -m venv ${VENV_PATH}"
+                    def pythonCmd = (env.PYTHON_EXE == "py") ? "py" : "\"${env.PYTHON_EXE}\""
+                    bat "${pythonCmd} -m venv ${VENV_PATH}"
                     // Upgrade pip and install requirements
                     bat "${VENV_PATH}\\Scripts\\pip.exe install --upgrade pip"
                     bat "${VENV_PATH}\\Scripts\\pip.exe install -r requirements.txt"
