@@ -10,7 +10,7 @@ pipeline {
         // Option 3: Install Python system-wide (C:\Program Files\Python311\)
         PYTHON_CMD = 'py'
         PYTHON_FULL_PATH = 'C:\\Users\\ADIB\\AppData\\Local\\Programs\\Python\\Python311\\python.exe'
-        IMAGE_NAME = 'devsecops-flask'
+        IMAGE_NAME = 'arithmetic-api'
         VENV_PATH = '.\\venv'
     }
 
