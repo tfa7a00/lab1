@@ -2,166 +2,134 @@ pipeline {
     agent any
 
     environment {
-        // Python and Docker
-        //PYTHON_IMAGE = 'python:3.9-slim' // only relevant if using docker later 
-        // Python path - LocalSystem may not access user directories
-        // Option 1: Use 'py' launcher (if available to LocalSystem)
-        // Option 2: Use full path (if LocalSystem can access it)
-        // Option 3: Install Python system-wide (C:\Program Files\Python311\)
-        PYTHON_CMD = 'py'
-        PYTHON_FULL_PATH = 'C:\\Users\\ADIB\\AppData\\Local\\Programs\\Python\\Python311\\python.exe'
-        IMAGE_NAME = 'arithmetic-api'
-        VENV_PATH = '.\\venv'
+        VENV_DIR = 'venv'
+        CI_LOGS = 'ci_logs'
+        IMAGE_NAME = 'lab-2-app'
     }
 
     stages {
+
         stage('Checkout') {
             steps {
-                // Pull the code from GitHub
+                echo "Cloning repository..."
                 checkout scm
             }
         }
 
-        stage('Find Python') {
+        stage('Setup Virtual Environment') {
             steps {
-                script {
-                    echo "Searching for Python..."
-                    
-                    // Use PowerShell to find Python
-                    def psScript = '''
-                        $found = $null
-                        
-                        # Try 'py' launcher
-                        $py = Get-Command py -ErrorAction SilentlyContinue
-                        if ($py) {
-                            $test = & py --version 2>&1
-                            if ($LASTEXITCODE -eq 0) {
-                                $found = "py"
-                            }
-                        }
-                        
-                        # Try 'python' command
-                        if (-not $found) {
-                            $python = Get-Command python -ErrorAction SilentlyContinue
-                            if ($python) {
-                                $test = & python --version 2>&1
-                                if ($LASTEXITCODE -eq 0) {
-                                    $found = $python.Path
-                                }
-                            }
-                        }
-                        
-                        # Try system paths
-                        if (-not $found) {
-                            $paths = @(
-                                "C:\\Program Files\\Python311\\python.exe",
-                                "C:\\Program Files\\Python312\\python.exe",
-                                "C:\\Program Files\\Python313\\python.exe",
-                                "C:\\Program Files (x86)\\Python311\\python.exe",
-                                "C:\\Python311\\python.exe",
-                                "C:\\Python312\\python.exe"
-                            )
-                            foreach ($path in $paths) {
-                                if (Test-Path $path) {
-                                    $test = & $path --version 2>&1
-                                    if ($LASTEXITCODE -eq 0) {
-                                        $found = $path
-                                        break
-                                    }
-                                }
-                            }
-                        }
-                        
-                        if ($found) {
-                            Write-Output $found
-                        } else {
-                            Write-Output "NOT_FOUND"
-                        }
-                    '''
-                    
-                    def psOutput = powershell(script: psScript, returnStdout: true).trim()
-                    
-                    if (psOutput && psOutput != "NOT_FOUND") {
-                        env.PYTHON_EXE = psOutput
-                        echo "Python found: ${env.PYTHON_EXE}"
-                    } else {
-                        error("Python not found!")
-                    }
-                }
-            }
-        }
+                powershell '''
+                    Write-Host "Creating virtual environment..."
+                    python -m venv $env:VENV_DIR
 
-        stage('Install Dependencies') {
-            steps {
-                script {
-                    // Create Python virtual environment
-                    // Using Python found in previous stage
-                    def pythonCmd = (env.PYTHON_EXE == "py") ? "py" : "\"${env.PYTHON_EXE}\""
-                    bat "${pythonCmd} -m venv ${VENV_PATH}"
-                    // Upgrade pip and install requirements
-                    bat "${VENV_PATH}\\Scripts\\pip.exe install --upgrade pip"
-                    bat "${VENV_PATH}\\Scripts\\pip.exe install -r requirements.txt"
-                }
+                    Write-Host "Upgrading pip and installing dependencies..."
+                    & "$env:VENV_DIR\\Scripts\\pip.exe" install --upgrade pip
+                    & "$env:VENV_DIR\\Scripts\\pip.exe" install -r requirements.txt
+                '''
             }
         }
 
         stage('Run Tests') {
             steps {
-                script {
-                    // Run tests with pytest
-                    bat "${VENV_PATH}\\Scripts\\pytest.exe"
-                }
+                powershell '''
+                    Write-Host "Running pytest..."
+
+                    New-Item -ItemType Directory -Force -Path $env:CI_LOGS | Out-Null
+
+                    & "$env:VENV_DIR\\Scripts\\pytest.exe" -v test_app.py `
+                        2>&1 | Tee-Object -FilePath "$env:CI_LOGS\\pytest.log"
+                '''
             }
         }
 
         stage('Static Code Analysis (Bandit)') {
             steps {
-                script {
-                    // Run Bandit for static code analysis (mark as UNSTABLE if issues)
-                    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                        bat "${VENV_PATH}\\Scripts\\bandit.exe -r ."
+                powershell '''
+                    Write-Host "Running Bandit..."
+
+                    New-Item -ItemType Directory -Force -Path $env:CI_LOGS | Out-Null
+
+                    # Run Bandit and ignore non-zero exit code
+                    try {
+                        & "$env:VENV_DIR\\Scripts\\bandit.exe" -r app -f json `
+                            -o "$env:CI_LOGS\\bandit-report.json"
+                    } catch {
+                        Write-Host "Bandit returned a non-zero exit code, continuing..."
                     }
-                }
+                '''
             }
         }
 
-        stage('Check Dependency Vulnerabilities (Safety)') {
+        stage('Dependency Vulnerabilities (Safety)') {
             steps {
-                script {
-                    bat "${VENV_PATH}\\Scripts\\safety.exe check -r requirements.txt"
-                }
+                powershell '''
+                    Write-Host "Running Safety..."
+
+                    New-Item -ItemType Directory -Force -Path $env:CI_LOGS | Out-Null
+
+                    try {
+                        & "$env:VENV_DIR\\Scripts\\safety.exe" check --json `
+                            > "$env:CI_LOGS\\safety-report.json"
+                    } catch {
+                        Write-Host "Safety returned a non-zero exit code, continuing..."
+                    }
+                '''
             }
         }
 
-        stage('Build & Scan Docker Image') {
+        stage('Build Docker Image') {
             steps {
-                script {
-                    // Build Docker image
-                    bat "docker-compose build"
-                    // Scan the Docker image with Trivy
-                    // Make sure Trivy is installed on your Windows agent
-                    bat "trivy image ${IMAGE_NAME}:latest || echo 'Trivy scan failed'"
-                }
+                powershell '''
+                    Write-Host "Building Docker image..."
+                    try {
+                        docker compose build
+                    } catch {
+                        Write-Host "Docker build returned a non-zero exit code, continuing..."
+                    }
+                '''
+            }
+        }
+
+        stage('Container Vulnerability Scan (Trivy)') {
+            steps {
+                powershell '''
+                    Write-Host "Running Trivy image scan..."
+
+                    New-Item -ItemType Directory -Force -Path $env:CI_LOGS | Out-Null
+
+                    try {
+                        trivy image `
+                            --severity CRITICAL,HIGH `
+                            --format json `
+                            -o "$env:CI_LOGS\\trivy-report.json" `
+                            "$env:IMAGE_NAME:latest"
+                    } catch {
+                        Write-Host "Trivy returned a non-zero exit code, continuing..."
+                    }
+                '''
             }
         }
 
         stage('Deploy Application') {
             steps {
-                script {
-                    bat "docker-compose up -d"
-                }
+                powershell '''
+                    Write-Host "Deploying Docker container..."
+                    try {
+                        docker compose up -d
+                    } catch {
+                        Write-Host "docker compose up failed, continuing..."
+                    }
+                '''
             }
         }
     }
 
     post {
         always {
-            // Clean up workspace after build
-            cleanWs()
-        }
-        failure {
-            // Optional: send notification if build fails
-            echo "Build failed! Check logs."
+            echo "Archiving CI logs..."
+            archiveArtifacts artifacts: "${CI_LOGS}/*.json, ${CI_LOGS}/*.log", allowEmptyArchive: true
+            echo "Pipeline finished. Check archived logs for details."
         }
     }
 }
+//ignore

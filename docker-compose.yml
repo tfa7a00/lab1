@@ -2,6 +2,8 @@ version: "3.9"
 services:
   web:
     build: .
+    image: arithmetic-api:latest
+    container_name: arithmetic-api
     ports:
       - "5000:5000"
     volumes:
