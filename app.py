@@ -3,13 +3,12 @@ import time, logging
 
 from prometheus_flask_exporter import PrometheusMetrics
 
-metrics = PrometheusMetrics(app)
-metrics.info("app_info", "Application info", version="1.0.0")
-
 #test bandit
 #PASSWORD = "admin123"  # bad practice
 
 app = Flask(__name__)
+metrics = PrometheusMetrics(app)
+metrics.info("app_info", "Application info", version="1.0.0")
 @app.route("/")
 def home():
     return "use /add, /subtract, /multiply, /divide with parameters a and b"
