@@ -32,11 +32,11 @@ pipeline {
                     \$ErrorActionPreference = 'Stop'
                     
                     Write-Host "Creating virtual environment..."
-                    & "${env.PYTHON_EXE}" -m venv "${env.VENV_DIR}" --upgrade-deps
+                    & "${env.PYTHON_EXE}" -m venv "${env.VENV_DIR}"
                     if (\$LASTEXITCODE -ne 0) { exit \$LASTEXITCODE }
 
-                    Write-Host "Bootstrapping pip (if needed)..."
-                    & "${env.VENV_DIR}\\Scripts\\python.exe" -m ensurepip --upgrade
+                    Write-Host "Bootstrapping pip..."
+                    & "${env.VENV_DIR}\\Scripts\\python.exe" -m ensurepip
                     if (\$LASTEXITCODE -ne 0) { exit \$LASTEXITCODE }
 
                     Write-Host "Upgrading pip, setuptools, wheel..."
