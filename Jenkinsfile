@@ -19,111 +19,95 @@ pipeline {
 
         stage('Setup Virtual Environment') {
             steps {
-                powershell '''
+                powershell """
                     Write-Host "Creating virtual environment..."
-                    & '${env:PYTHON_EXE}' -m venv $env:VENV_DIR --upgrade-deps
+                    & "$env:PYTHON_EXE" -m venv $env:VENV_DIR --upgrade-deps
 
                     Write-Host "Bootstrapping pip..."
-                    & '$env:VENV_DIR\\Scripts\\python.exe' -m ensurepip --upgrade
+                    & "$env:VENV_DIR\\Scripts\\python.exe" -m ensurepip --upgrade
 
                     Write-Host "Upgrading pip and installing dependencies..."
-                    & '$env:VENV_DIR\\Scripts\\python.exe' -m pip install --upgrade pip
-                    & '$env:VENV_DIR\\Scripts\\python.exe' -m pip install -r requirements.txt
-       
-                '''
+                    & "$env:VENV_DIR\\Scripts\\python.exe" -m pip install --upgrade pip
+                    & "$env:VENV_DIR\\Scripts\\python.exe" -m pip install -r requirements.txt
+                """
             }
         }
 
         stage('Run Tests') {
             steps {
-                powershell '''
+                powershell """
                     Write-Host "Running pytest..."
-
                     New-Item -ItemType Directory -Force -Path $env:CI_LOGS | Out-Null
-
-                    & "$env:VENV_DIR\\Scripts\\pytest.exe" -v test_app.py `
-                        2>&1 | Tee-Object -FilePath "$env:CI_LOGS\\pytest.log"
-                '''
+                    & "$env:VENV_DIR\\Scripts\\pytest.exe" -v test_app.py 2>&1 | Tee-Object -FilePath "$env:CI_LOGS\\pytest.log"
+                """
             }
         }
 
         stage('Static Code Analysis (Bandit)') {
             steps {
-                powershell '''
+                powershell """
                     Write-Host "Running Bandit..."
-
                     New-Item -ItemType Directory -Force -Path $env:CI_LOGS | Out-Null
-
                     try {
-                        & "$env:VENV_DIR\\Scripts\\bandit.exe" -r app -f json `
-                            -o "$env:CI_LOGS\\bandit-report.json"
+                        & "$env:VENV_DIR\\Scripts\\bandit.exe" -r app -f json -o "$env:CI_LOGS\\bandit-report.json"
                     } catch {
                         Write-Host "Bandit exited with error code. Continuing..."
                     }
-                '''
+                """
             }
         }
 
         stage('Dependency Vulnerabilities (Safety)') {
             steps {
-                powershell '''
+                powershell """
                     Write-Host "Running Safety..."
-
                     New-Item -ItemType Directory -Force -Path $env:CI_LOGS | Out-Null
-
                     try {
-                        & "$env:VENV_DIR\\Scripts\\safety.exe" check --json `
-                            > "$env:CI_LOGS\\safety-report.json"
+                        & "$env:VENV_DIR\\Scripts\\python.exe" -m safety check --json > "$env:CI_LOGS\\safety-report.json"
                     } catch {
                         Write-Host "Safety exited with error code. Continuing..."
                     }
-                '''
+                """
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                powershell '''
+                powershell """
                     Write-Host "Building Docker image..."
                     try {
                         docker compose build
                     } catch {
                         Write-Host "Docker build failed. Continuing..."
                     }
-                '''
+                """
             }
         }
 
         stage('Container Vulnerability Scan (Trivy)') {
             steps {
-                powershell '''
+                powershell """
                     Write-Host "Running Trivy image scan..."
-
                     New-Item -ItemType Directory -Force -Path $env:CI_LOGS | Out-Null
-
                     try {
-                        trivy image `
-                            --severity CRITICAL,HIGH `
-                            --format json `
-                            -o "$env:CI_LOGS\\trivy-report.json" `
-                            "$env:IMAGE_NAME:latest"
+                        trivy image --severity CRITICAL,HIGH --format json -o "$env:CI_LOGS\\trivy-report.json" "$env:IMAGE_NAME:latest"
                     } catch {
                         Write-Host "Trivy exited with error. Continuing..."
                     }
-                '''
+                """
             }
         }
 
         stage('Deploy Application') {
             steps {
-                powershell '''
+                powershell """
                     Write-Host "Deploying Docker container..."
                     try {
                         docker compose up -d
                     } catch {
                         Write-Host "Docker run failed. Continuing..."
                     }
-                '''
+                """
             }
         }
     }
