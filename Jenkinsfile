@@ -2,8 +2,10 @@ pipeline {
     agent any
 
     environment {
+        VENV_DIR = 'venv'
         CI_LOGS = 'ci_logs'
         IMAGE_NAME = 'lab-2-app'
+        PYTHON_EXE = 'C:\\Program Files\\Python312\\python.exe'
     }
 
     stages {
@@ -18,20 +20,17 @@ pipeline {
         stage('Setup Virtual Environment') {
             steps {
                 powershell """
-                    \$python = 'C:\\Program Files\\Python312\\python.exe'
-                    \$venv = 'venv'
-
                     Write-Host "Creating virtual environment..."
-                    & \$python -m venv \$venv --upgrade-deps
+                    & "$env:PYTHON_EXE" -m venv "$env:VENV_DIR" --upgrade-deps
 
                     Write-Host "Bootstrapping pip..."
-                    & "\$venv\\Scripts\\python.exe" -m ensurepip --upgrade
+                    & "$env:VENV_DIR\\Scripts\\python.exe" -m ensurepip --upgrade
 
                     Write-Host "Upgrading pip, setuptools, wheel..."
-                    & "\$venv\\Scripts\\python.exe" -m pip install --upgrade pip setuptools wheel
+                    & "$env:VENV_DIR\\Scripts\\python.exe" -m pip install --upgrade pip setuptools wheel --use-pep517
 
                     Write-Host "Installing dependencies from requirements.txt..."
-                    & "\$venv\\Scripts\\python.exe" -m pip install -r requirements.txt
+                    & "$env:VENV_DIR\\Scripts\\python.exe" -m pip install -r requirements.txt --use-pep517
                 """
             }
         }
@@ -39,10 +38,9 @@ pipeline {
         stage('Run Tests') {
             steps {
                 powershell """
-                    \$venv = 'venv'
                     Write-Host "Running pytest..."
-                    New-Item -ItemType Directory -Force -Path '${CI_LOGS}' | Out-Null
-                    & "\$venv\\Scripts\\pytest.exe" -v test_app.py 2>&1 | Tee-Object -FilePath "${CI_LOGS}\\pytest.log"
+                    New-Item -ItemType Directory -Force -Path "$env:CI_LOGS" | Out-Null
+                    & "$env:VENV_DIR\\Scripts\\pytest.exe" -v test_app.py 2>&1 | Tee-Object -FilePath "$env:CI_LOGS\\pytest.log"
                 """
             }
         }
@@ -50,11 +48,10 @@ pipeline {
         stage('Static Code Analysis (Bandit)') {
             steps {
                 powershell """
-                    \$venv = 'venv'
                     Write-Host "Running Bandit..."
-                    New-Item -ItemType Directory -Force -Path '${CI_LOGS}' | Out-Null
+                    New-Item -ItemType Directory -Force -Path "$env:CI_LOGS" | Out-Null
                     try {
-                        & "\$venv\\Scripts\\bandit.exe" -r app -f json -o "${CI_LOGS}\\bandit-report.json"
+                        & "$env:VENV_DIR\\Scripts\\bandit.exe" -r app -f json -o "$env:CI_LOGS\\bandit-report.json"
                     } catch {
                         Write-Host "Bandit exited with error code. Continuing..."
                     }
@@ -65,11 +62,10 @@ pipeline {
         stage('Dependency Vulnerabilities (Safety)') {
             steps {
                 powershell """
-                    \$venv = 'venv'
                     Write-Host "Running Safety..."
-                    New-Item -ItemType Directory -Force -Path '${CI_LOGS}' | Out-Null
+                    New-Item -ItemType Directory -Force -Path "$env:CI_LOGS" | Out-Null
                     try {
-                        & "\$venv\\Scripts\\safety.exe" check --json > "${CI_LOGS}\\safety-report.json"
+                        & "$env:VENV_DIR\\Scripts\\safety.exe" check --json > "$env:CI_LOGS\\safety-report.json"
                     } catch {
                         Write-Host "Safety exited with error code. Continuing..."
                     }
@@ -94,9 +90,9 @@ pipeline {
             steps {
                 powershell """
                     Write-Host "Running Trivy image scan..."
-                    New-Item -ItemType Directory -Force -Path '${CI_LOGS}' | Out-Null
+                    New-Item -ItemType Directory -Force -Path "$env:CI_LOGS" | Out-Null
                     try {
-                        trivy image --severity CRITICAL,HIGH --format json -o "${CI_LOGS}\\trivy-report.json" "${IMAGE_NAME}:latest"
+                        trivy image --severity CRITICAL,HIGH --format json -o "$env:CI_LOGS\\trivy-report.json" "$env:IMAGE_NAME:latest"
                     } catch {
                         Write-Host "Trivy exited with error. Continuing..."
                     }
@@ -121,7 +117,7 @@ pipeline {
     post {
         always {
             echo "Archiving CI logs..."
-            archiveArtifacts artifacts: "${CI_LOGS}/*.json, ${CI_LOGS}/*.log", allowEmptyArchive: true
+            archiveArtifacts artifacts: "\${CI_LOGS}/*.json, \${CI_LOGS}/*.log", allowEmptyArchive: true
             echo "Pipeline finished. Check archived logs for details."
         }
     }
