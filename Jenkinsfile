@@ -21,7 +21,7 @@ pipeline {
             steps {
                 powershell """
                     Write-Host "Creating virtual environment..."
-                    & "$env:PYTHON_EXE" -m venv $env:VENV_DIR --upgrade-deps
+                    & "$env:PYTHON_EXE" -m venv "$env:VENV_DIR" --upgrade-deps
 
                     Write-Host "Bootstrapping pip..."
                     & "$env:VENV_DIR\\Scripts\\python.exe" -m ensurepip --upgrade
@@ -37,8 +37,10 @@ pipeline {
             steps {
                 powershell """
                     Write-Host "Running pytest..."
-                    New-Item -ItemType Directory -Force -Path $env:CI_LOGS | Out-Null
-                    & "$env:VENV_DIR\\Scripts\\pytest.exe" -v test_app.py 2>&1 | Tee-Object -FilePath "$env:CI_LOGS\\pytest.log"
+                    New-Item -ItemType Directory -Force -Path "$env:CI_LOGS" | Out-Null
+
+                    & "$env:VENV_DIR\\Scripts\\pytest.exe" -v test_app.py `
+                        2>&1 | Tee-Object -FilePath "$env:CI_LOGS\\pytest.log"
                 """
             }
         }
@@ -47,9 +49,11 @@ pipeline {
             steps {
                 powershell """
                     Write-Host "Running Bandit..."
-                    New-Item -ItemType Directory -Force -Path $env:CI_LOGS | Out-Null
+                    New-Item -ItemType Directory -Force -Path "$env:CI_LOGS" | Out-Null
+
                     try {
-                        & "$env:VENV_DIR\\Scripts\\bandit.exe" -r app -f json -o "$env:CI_LOGS\\bandit-report.json"
+                        & "$env:VENV_DIR\\Scripts\\bandit.exe" -r app -f json `
+                            -o "$env:CI_LOGS\\bandit-report.json"
                     } catch {
                         Write-Host "Bandit exited with error code. Continuing..."
                     }
@@ -61,9 +65,11 @@ pipeline {
             steps {
                 powershell """
                     Write-Host "Running Safety..."
-                    New-Item -ItemType Directory -Force -Path $env:CI_LOGS | Out-Null
+                    New-Item -ItemType Directory -Force -Path "$env:CI_LOGS" | Out-Null
+
                     try {
-                        & "$env:VENV_DIR\\Scripts\\python.exe" -m safety check --json > "$env:CI_LOGS\\safety-report.json"
+                        & "$env:VENV_DIR\\Scripts\\safety.exe" check --json `
+                            > "$env:CI_LOGS\\safety-report.json"
                     } catch {
                         Write-Host "Safety exited with error code. Continuing..."
                     }
@@ -88,9 +94,14 @@ pipeline {
             steps {
                 powershell """
                     Write-Host "Running Trivy image scan..."
-                    New-Item -ItemType Directory -Force -Path $env:CI_LOGS | Out-Null
+                    New-Item -ItemType Directory -Force -Path "$env:CI_LOGS" | Out-Null
+
                     try {
-                        trivy image --severity CRITICAL,HIGH --format json -o "$env:CI_LOGS\\trivy-report.json" "$env:IMAGE_NAME:latest"
+                        trivy image `
+                            --severity CRITICAL,HIGH `
+                            --format json `
+                            -o "$env:CI_LOGS\\trivy-report.json" `
+                            "$env:IMAGE_NAME:latest"
                     } catch {
                         Write-Host "Trivy exited with error. Continuing..."
                     }
