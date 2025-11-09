@@ -5,6 +5,7 @@ pipeline {
         VENV_DIR = 'venv'
         CI_LOGS = 'ci_logs'
         IMAGE_NAME = 'lab-2-app'
+        PYTHON_EXE = 'C:\\Users\\ADIB\\AppData\\Local\\Programs\\Python\\Python312\\python.exe'
     }
 
     stages {
@@ -20,7 +21,7 @@ pipeline {
             steps {
                 powershell '''
                     Write-Host "Creating virtual environment..."
-                    python -m venv $env:VENV_DIR
+                    & "$env:PYTHON_EXE" -m venv $env:VENV_DIR
 
                     Write-Host "Upgrading pip and installing dependencies..."
                     & "$env:VENV_DIR\\Scripts\\pip.exe" install --upgrade pip
@@ -49,12 +50,11 @@ pipeline {
 
                     New-Item -ItemType Directory -Force -Path $env:CI_LOGS | Out-Null
 
-                    # Run Bandit and ignore non-zero exit code
                     try {
                         & "$env:VENV_DIR\\Scripts\\bandit.exe" -r app -f json `
                             -o "$env:CI_LOGS\\bandit-report.json"
                     } catch {
-                        Write-Host "Bandit returned a non-zero exit code, continuing..."
+                        Write-Host "Bandit exited with error code. Continuing..."
                     }
                 '''
             }
@@ -71,7 +71,7 @@ pipeline {
                         & "$env:VENV_DIR\\Scripts\\safety.exe" check --json `
                             > "$env:CI_LOGS\\safety-report.json"
                     } catch {
-                        Write-Host "Safety returned a non-zero exit code, continuing..."
+                        Write-Host "Safety exited with error code. Continuing..."
                     }
                 '''
             }
@@ -84,7 +84,7 @@ pipeline {
                     try {
                         docker compose build
                     } catch {
-                        Write-Host "Docker build returned a non-zero exit code, continuing..."
+                        Write-Host "Docker build failed. Continuing..."
                     }
                 '''
             }
@@ -104,7 +104,7 @@ pipeline {
                             -o "$env:CI_LOGS\\trivy-report.json" `
                             "$env:IMAGE_NAME:latest"
                     } catch {
-                        Write-Host "Trivy returned a non-zero exit code, continuing..."
+                        Write-Host "Trivy exited with error. Continuing..."
                     }
                 '''
             }
@@ -117,7 +117,7 @@ pipeline {
                     try {
                         docker compose up -d
                     } catch {
-                        Write-Host "docker compose up failed, continuing..."
+                        Write-Host "Docker run failed. Continuing..."
                     }
                 '''
             }
@@ -132,4 +132,3 @@ pipeline {
         }
     }
 }
-//ignore
