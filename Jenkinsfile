@@ -31,20 +31,29 @@ pipeline {
                 powershell """
                     \$ErrorActionPreference = 'Stop'
                     
-                    Write-Host "Creating virtual environment..."
+                    Write-Host "Removing old virtual environment if it exists..."
+                    if (Test-Path "${env.VENV_DIR}") {
+                        Remove-Item -Recurse -Force "${env.VENV_DIR}"
+                    }
+                    
+                    Write-Host "Creating fresh virtual environment..."
                     & "${env.PYTHON_EXE}" -m venv "${env.VENV_DIR}"
                     if (\$LASTEXITCODE -ne 0) { exit \$LASTEXITCODE }
 
-                    Write-Host "Bootstrapping pip..."
-                    & "${env.VENV_DIR}\\Scripts\\python.exe" -m ensurepip
+                    Write-Host "Activating virtual environment and installing pip..."
+                    \$venvPython = "${env.VENV_DIR}\\Scripts\\python.exe"
+                    
+                    # Use the venv python directly to upgrade pip
+                    Write-Host "Upgrading pip..."
+                    & \$venvPython -m pip install --upgrade pip
                     if (\$LASTEXITCODE -ne 0) { exit \$LASTEXITCODE }
 
-                    Write-Host "Upgrading pip, setuptools, wheel..."
-                    & "${env.VENV_DIR}\\Scripts\\python.exe" -m pip install --upgrade pip setuptools wheel
+                    Write-Host "Installing setuptools and wheel..."
+                    & \$venvPython -m pip install --upgrade setuptools wheel
                     if (\$LASTEXITCODE -ne 0) { exit \$LASTEXITCODE }
 
                     Write-Host "Installing dependencies from requirements.txt..."
-                    & "${env.VENV_DIR}\\Scripts\\python.exe" -m pip install -r requirements.txt
+                    & \$venvPython -m pip install -r requirements.txt
                     if (\$LASTEXITCODE -ne 0) { exit \$LASTEXITCODE }
                 """
             }
