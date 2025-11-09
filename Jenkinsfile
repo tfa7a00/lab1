@@ -100,21 +100,32 @@ pipeline {
             steps {
                 powershell """
                     Write-Host "Running Safety check..."
+                    Write-Host "Note: Safety may have dependency conflicts or require authentication."
                     
-                    # Safety may require authentication in newer versions
-                    # Capture both stdout and stderr
-                    & "${env.VENV_DIR}\\Scripts\\python.exe" -m safety check --json `
-                        2>&1 | Tee-Object -FilePath "${env.CI_LOGS}\\safety-report.json"
-                    
-                    \$safetyExitCode = \$LASTEXITCODE
-                    Write-Host "Safety completed with exit code: \$safetyExitCode"
-                    
-                    # Exit codes: 0 = clean, 64 = vulnerabilities, 1 = error (auth/other)
-                    if (\$safetyExitCode -eq 64) {
-                        Write-Host "WARNING: Safety found vulnerabilities. Check the report."
-                    } elseif (\$safetyExitCode -eq 1) {
-                        Write-Host "WARNING: Safety check failed (possibly due to authentication requirement)."
-                        Write-Host "Consider using 'safety check --continue-on-error' or configuring Safety API key."
+                    try {
+                        # Attempt to run Safety
+                        & "${env.VENV_DIR}\\Scripts\\python.exe" -m safety check --json `
+                            2>&1 | Tee-Object -FilePath "${env.CI_LOGS}\\safety-report.json"
+                        
+                        \$safetyExitCode = \$LASTEXITCODE
+                        
+                        if (\$safetyExitCode -eq 0) {
+                            Write-Host "SUCCESS: No vulnerabilities found."
+                        } elseif (\$safetyExitCode -eq 64) {
+                            Write-Host "WARNING: Safety found vulnerabilities. Check the report."
+                        } else {
+                            Write-Host "WARNING: Safety check failed with exit code \$safetyExitCode"
+                        }
+                    } catch {
+                        Write-Host "ERROR: Safety check encountered an error: \$_"
+                        Write-Host "This is often due to:"
+                        Write-Host "  - Dependency conflicts (typer/rich version issues)"
+                        Write-Host "  - Authentication requirements in newer Safety versions"
+                        Write-Host ""
+                        Write-Host "Consider alternatives:"
+                        Write-Host "  - pip-audit: 'pip install pip-audit && pip-audit'"
+                        Write-Host "  - Fix Safety: 'pip install safety==3.0.1 typer==0.9.0'"
+                        Write-Host ""
                         Write-Host "Continuing pipeline..."
                     }
                 """
