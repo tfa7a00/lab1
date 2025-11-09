@@ -21,11 +21,15 @@ pipeline {
             steps {
                 powershell '''
                     Write-Host "Creating virtual environment..."
-                    & "$env:PYTHON_EXE" -m venv $env:VENV_DIR
+                    & '${env:PYTHON_EXE}' -m venv $env:VENV_DIR --upgrade-deps
+
+                    Write-Host "Bootstrapping pip..."
+                    & '$env:VENV_DIR\\Scripts\\python.exe' -m ensurepip --upgrade
 
                     Write-Host "Upgrading pip and installing dependencies..."
-                    & "$env:VENV_DIR\\Scripts\\pip.exe" install --upgrade pip
-                    & "$env:VENV_DIR\\Scripts\\pip.exe" install -r requirements.txt
+                    & '$env:VENV_DIR\\Scripts\\python.exe' -m pip install --upgrade pip
+                    & '$env:VENV_DIR\\Scripts\\python.exe' -m pip install -r requirements.txt
+       
                 '''
             }
         }
