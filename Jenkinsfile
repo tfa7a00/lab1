@@ -102,16 +102,20 @@ pipeline {
                     Write-Host "Running Safety check..."
                     
                     # Safety may require authentication in newer versions
-                    # Using --continue-on-error flag if available
+                    # Capture both stdout and stderr
                     & "${env.VENV_DIR}\\Scripts\\python.exe" -m safety check --json `
-                        2>&1 | Out-File -FilePath "${env.CI_LOGS}\\safety-report.json"
+                        2>&1 | Tee-Object -FilePath "${env.CI_LOGS}\\safety-report.json"
                     
                     \$safetyExitCode = \$LASTEXITCODE
                     Write-Host "Safety completed with exit code: \$safetyExitCode"
                     
-                    # Exit code 64 = vulnerabilities found, 0 = clean
+                    # Exit codes: 0 = clean, 64 = vulnerabilities, 1 = error (auth/other)
                     if (\$safetyExitCode -eq 64) {
                         Write-Host "WARNING: Safety found vulnerabilities. Check the report."
+                    } elseif (\$safetyExitCode -eq 1) {
+                        Write-Host "WARNING: Safety check failed (possibly due to authentication requirement)."
+                        Write-Host "Consider using 'safety check --continue-on-error' or configuring Safety API key."
+                        Write-Host "Continuing pipeline..."
                     }
                 """
             }
