@@ -190,6 +190,13 @@ pipeline {
                 powershell """
                     \$ErrorActionPreference = 'Stop'
                     
+                    Write-Host "Stopping and removing old containers..."
+                    docker compose down
+                    if (\$LASTEXITCODE -ne 0) {
+                        Write-Host "Warning: docker compose down failed with exit code \$LASTEXITCODE"
+                        Write-Host "This might be okay if no containers were running."
+                    }
+                    
                     Write-Host "Deploying Docker container..."
                     docker compose up -d
                     if (\$LASTEXITCODE -ne 0) {
