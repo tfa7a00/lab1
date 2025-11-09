@@ -131,7 +131,7 @@ pipeline {
                     Write-Host "Running Trivy image scan..."
                     
                     # Get the actual image name from docker compose
-                    \$imageName = docker compose config --images 2>$null
+                    \$imageName = docker compose config --images 2>`$null
                     if ([string]::IsNullOrWhiteSpace(\$imageName)) {
                         Write-Host "WARNING: Could not determine image name from docker compose."
                         Write-Host "Attempting to scan ${env.IMAGE_NAME}:latest"
