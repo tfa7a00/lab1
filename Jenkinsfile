@@ -5,7 +5,7 @@ pipeline {
         VENV_DIR = 'venv'
         CI_LOGS = 'ci_logs'
         IMAGE_NAME = 'lab-2-app'
-        PYTHON_EXE = 'C:\\Program Files\\Python313\\python.exe'
+        PYTHON_EXE = 'C:\\Program Files\\Python312\\python.exe'
     }
 
     stages {
