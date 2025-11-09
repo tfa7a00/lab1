@@ -188,14 +188,11 @@ pipeline {
         stage('Deploy Application') {
             steps {
                 powershell """
-                    \$ErrorActionPreference = 'Stop'
-                    
                     Write-Host "Stopping and removing old containers..."
-                    docker compose down
-                    if (\$LASTEXITCODE -ne 0) {
-                        Write-Host "Warning: docker compose down failed with exit code \$LASTEXITCODE"
-                        Write-Host "This might be okay if no containers were running."
-                    }
+                    docker compose down 2>&1 | Out-Null
+                    
+                    Write-Host "Forcefully removing any conflicting containers..."
+                    docker rm -f arithmetic-api 2>&1 | Out-Null
                     
                     Write-Host "Deploying Docker container..."
                     docker compose up -d
@@ -205,6 +202,9 @@ pipeline {
                     }
                     
                     Write-Host "Application deployed successfully."
+                    
+                    Write-Host "Verifying deployment..."
+                    docker ps --filter "name=arithmetic-api"
                 """
             }
         }
