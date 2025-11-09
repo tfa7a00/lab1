@@ -5,7 +5,8 @@ pipeline {
         VENV_DIR = 'venv'
         CI_LOGS = 'ci_logs'
         IMAGE_NAME = 'lab-2-app'
-        PYTHON_EXE = 'C:\\Program Files\\Python312\\python.exe'
+        // Ensure this path is correct for your Jenkins agent's Python installation
+        PYTHON_EXE = 'C:\\Program Files\\Python312\\python.exe' 
     }
 
     stages {
@@ -19,18 +20,22 @@ pipeline {
 
         stage('Setup Virtual Environment') {
             steps {
+                // Using triple double-quotes for PowerShell block to allow Jenkins env var interpolation
                 powershell """
                     Write-Host "Creating virtual environment..."
-                    & "$env:PYTHON_EXE" -m venv $env:VENV_DIR --upgrade-deps
+                    # Jenkins Groovy will replace $env.PYTHON_EXE with its literal value BEFORE PowerShell runs.
+                    # PowerShell then receives a string like 'C:\Program Files\Python312\python.exe'
+                    & "${env.PYTHON_EXE}" -m venv "${env.VENV_DIR}" --upgrade-deps
 
-                    Write-Host "Bootstrapping pip..."
-                    & "$env:VENV_DIR\\Scripts\\python.exe" -m ensurepip --default-pip
+                    Write-Host "Bootstrapping pip (if needed)..."
+                    # Use the Python in the newly created venv
+                    & "${env.VENV_DIR}\\Scripts\\python.exe" -m ensurepip --upgrade
 
                     Write-Host "Upgrading pip, setuptools, wheel..."
-                    & "$env:VENV_DIR\\Scripts\\pip.exe" install --upgrade --force-reinstall pip setuptools wheel
+                    & "${env.VENV_DIR}\\Scripts\\python.exe" -m pip install --upgrade pip setuptools wheel
 
                     Write-Host "Installing dependencies from requirements.txt..."
-                    & "$env:VENV_DIR\\Scripts\\pip.exe" install -r requirements.txt --use-pep517
+                    & "${env.VENV_DIR}\\Scripts\\python.exe" -m pip install -r requirements.txt
                 """
             }
         }
@@ -39,8 +44,11 @@ pipeline {
             steps {
                 powershell """
                     Write-Host "Running pytest..."
-                    New-Item -ItemType Directory -Force -Path $env:CI_LOGS | Out-Null
-                    & "$env:VENV_DIR\\Scripts\\pytest.exe" -v test_app.py 2>&1 | Tee-Object -FilePath "$env:CI_LOGS\\pytest.log"
+
+                    New-Item -ItemType Directory -Force -Path "${env.CI_LOGS}" | Out-Null
+
+                    & "${env.VENV_DIR}\\Scripts\\python.exe" -m pytest -v test_app.py 
+                        2>&1 | Tee-Object -FilePath "${env.CI_LOGS}\\pytest.log"
                 """
             }
         }
@@ -49,9 +57,12 @@ pipeline {
             steps {
                 powershell """
                     Write-Host "Running Bandit..."
-                    New-Item -ItemType Directory -Force -Path $env:CI_LOGS | Out-Null
+
+                    New-Item -ItemType Directory -Force -Path "${env.CI_LOGS}" | Out-Null
+
                     try {
-                        & "$env:VENV_DIR\\Scripts\\bandit.exe" -r app -f json -o "$env:CI_LOGS\\bandit-report.json"
+                        & "${env.VENV_DIR}\\Scripts\\python.exe" -m bandit -r app -f json `
+                            -o "${env.CI_LOGS}\\bandit-report.json"
                     } catch {
                         Write-Host "Bandit exited with error code. Continuing..."
                     }
@@ -63,9 +74,12 @@ pipeline {
             steps {
                 powershell """
                     Write-Host "Running Safety..."
-                    New-Item -ItemType Directory -Force -Path $env:CI_LOGS | Out-Null
+
+                    New-Item -ItemType Directory -Force -Path "${env.CI_LOGS}" | Out-Null
+
                     try {
-                        & "$env:VENV_DIR\\Scripts\\safety.exe" check --json > "$env:CI_LOGS\\safety-report.json"
+                        & "${env.VENV_DIR}\\Scripts\\python.exe" -m safety check --json `
+                            > "${env.CI_LOGS}\\safety-report.json"
                     } catch {
                         Write-Host "Safety exited with error code. Continuing..."
                     }
@@ -90,9 +104,15 @@ pipeline {
             steps {
                 powershell """
                     Write-Host "Running Trivy image scan..."
-                    New-Item -ItemType Directory -Force -Path $env:CI_LOGS | Out-Null
+
+                    New-Item -ItemType Directory -Force -Path "${env.CI_LOGS}" | Out-Null
+
                     try {
-                        trivy image --severity CRITICAL,HIGH --format json -o "$env:CI_LOGS\\trivy-report.json" "$env:IMAGE_NAME:latest"
+                        trivy image `
+                            --severity CRITICAL,HIGH `
+                            --format json `
+                            -o "${env.CI_LOGS}\\trivy-report.json" `
+                            "${env.IMAGE_NAME}:latest"
                     } catch {
                         Write-Host "Trivy exited with error. Continuing..."
                     }
