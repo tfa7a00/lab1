@@ -20,17 +20,21 @@ pipeline {
         stage('Setup Virtual Environment') {
             steps {
                 powershell """
+                    # Assign Jenkins env vars to PowerShell variables
+                    \$python = '${PYTHON_EXE}'
+                    \$venv = '${VENV_DIR}'
+
                     Write-Host "Creating virtual environment..."
-                    & "$env:PYTHON_EXE" -m venv "$env:VENV_DIR" --upgrade-deps
+                    & \$python -m venv \$venv --upgrade-deps
 
                     Write-Host "Bootstrapping pip..."
-                    & "$env:VENV_DIR\\Scripts\\python.exe" -m ensurepip --upgrade
+                    & "\$venv\\Scripts\\python.exe" -m ensurepip --upgrade
 
                     Write-Host "Upgrading pip, setuptools, wheel..."
-                    & "$env:VENV_DIR\\Scripts\\python.exe" -m pip install --upgrade pip setuptools wheel --use-pep517
+                    & "\$venv\\Scripts\\python.exe" -m pip install --upgrade pip setuptools wheel
 
                     Write-Host "Installing dependencies from requirements.txt..."
-                    & "$env:VENV_DIR\\Scripts\\python.exe" -m pip install -r requirements.txt --use-pep517
+                    & "\$venv\\Scripts\\python.exe" -m pip install -r requirements.txt
                 """
             }
         }
@@ -38,9 +42,14 @@ pipeline {
         stage('Run Tests') {
             steps {
                 powershell """
+                    \$venv = '${VENV_DIR}'
+                    \$ci_logs = '${CI_LOGS}'
+
                     Write-Host "Running pytest..."
-                    New-Item -ItemType Directory -Force -Path "$env:CI_LOGS" | Out-Null
-                    & "$env:VENV_DIR\\Scripts\\pytest.exe" -v test_app.py 2>&1 | Tee-Object -FilePath "$env:CI_LOGS\\pytest.log"
+                    New-Item -ItemType Directory -Force -Path \$ci_logs | Out-Null
+
+                    & "\$venv\\Scripts\\pytest.exe" -v test_app.py `
+                        2>&1 | Tee-Object -FilePath "\$ci_logs\\pytest.log"
                 """
             }
         }
@@ -48,10 +57,15 @@ pipeline {
         stage('Static Code Analysis (Bandit)') {
             steps {
                 powershell """
+                    \$venv = '${VENV_DIR}'
+                    \$ci_logs = '${CI_LOGS}'
+
                     Write-Host "Running Bandit..."
-                    New-Item -ItemType Directory -Force -Path "$env:CI_LOGS" | Out-Null
+                    New-Item -ItemType Directory -Force -Path \$ci_logs | Out-Null
+
                     try {
-                        & "$env:VENV_DIR\\Scripts\\bandit.exe" -r app -f json -o "$env:CI_LOGS\\bandit-report.json"
+                        & "\$venv\\Scripts\\bandit.exe" -r app -f json `
+                            -o "\$ci_logs\\bandit-report.json"
                     } catch {
                         Write-Host "Bandit exited with error code. Continuing..."
                     }
@@ -62,10 +76,15 @@ pipeline {
         stage('Dependency Vulnerabilities (Safety)') {
             steps {
                 powershell """
+                    \$venv = '${VENV_DIR}'
+                    \$ci_logs = '${CI_LOGS}'
+
                     Write-Host "Running Safety..."
-                    New-Item -ItemType Directory -Force -Path "$env:CI_LOGS" | Out-Null
+                    New-Item -ItemType Directory -Force -Path \$ci_logs | Out-Null
+
                     try {
-                        & "$env:VENV_DIR\\Scripts\\safety.exe" check --json > "$env:CI_LOGS\\safety-report.json"
+                        & "\$venv\\Scripts\\safety.exe" check --json `
+                            > "\$ci_logs\\safety-report.json"
                     } catch {
                         Write-Host "Safety exited with error code. Continuing..."
                     }
@@ -89,10 +108,18 @@ pipeline {
         stage('Container Vulnerability Scan (Trivy)') {
             steps {
                 powershell """
+                    \$ci_logs = '${CI_LOGS}'
+                    \$image = '${IMAGE_NAME}'
+
                     Write-Host "Running Trivy image scan..."
-                    New-Item -ItemType Directory -Force -Path "$env:CI_LOGS" | Out-Null
+                    New-Item -ItemType Directory -Force -Path \$ci_logs | Out-Null
+
                     try {
-                        trivy image --severity CRITICAL,HIGH --format json -o "$env:CI_LOGS\\trivy-report.json" "$env:IMAGE_NAME:latest"
+                        trivy image `
+                            --severity CRITICAL,HIGH `
+                            --format json `
+                            -o "\$ci_logs\\trivy-report.json" `
+                            "\$image:latest"
                     } catch {
                         Write-Host "Trivy exited with error. Continuing..."
                     }
@@ -117,7 +144,7 @@ pipeline {
     post {
         always {
             echo "Archiving CI logs..."
-            archiveArtifacts artifacts: "\${CI_LOGS}/*.json, \${CI_LOGS}/*.log", allowEmptyArchive: true
+            archiveArtifacts artifacts: "${CI_LOGS}/*.json, ${CI_LOGS}/*.log", allowEmptyArchive: true
             echo "Pipeline finished. Check archived logs for details."
         }
     }
