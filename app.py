@@ -3,12 +3,44 @@ import time, logging
 
 from prometheus_flask_exporter import PrometheusMetrics
 
+import time, logging
+
+import logging
+import json_log_formatter
+
+formatter = json_log_formatter.JSONFormatter()
+
+json_handler = logging.FileHandler("app.json.log")
+json_handler.setFormatter(formatter)
+
+logger = logging.getLogger()
+logger.addHandler(json_handler)
+logger.setLevel(logging.INFO)
+
+
+
+app = Flask(__name__)
+
+metrics = PrometheusMetrics(app)
+metrics.info("app_info", "Application info", version="1.0.0")
+
+logging.basicConfig(filename='app.log', level=logging.INFO)
+
+@app.before_request
+def start_timer():
+    request.start_time = time.time()
+
+@app.after_request
+def log_request(response):
+    duration = time.time() - request.start_time
+    logging.info(f"{request.path} took {duration:.3f}s")
+    return response
+
+
 #test bandit
 #PASSWORD = "admin123"  # bad practice
 
-app = Flask(__name__)
-metrics = PrometheusMetrics(app)
-metrics.info("app_info", "Application info", version="1.0.0")
+
 @app.route("/")
 def home():
     return "use /add, /subtract, /multiply, /divide with parameters a and b"
